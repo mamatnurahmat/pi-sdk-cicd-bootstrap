@@ -1,0 +1,145 @@
+# ============================================================================
+# pi-sdk-cicd-bootstrap — Kubernetes manifest (contoh)
+# ============================================================================
+# Pola A: CronJob untuk dry-run/plan semua repo secara berkala (aman, tanpa LLM)
+# Pola B: Job manual untuk bootstrap 1 repo (--dry-run true default)
+#
+# ⚠️ JANGAN apply langsung ke production — ini contoh. Sesuaikan namespace,
+#    RBAC, dan secret sesuai environment.
+#
+# Apply:
+#   kubectl apply -f k8s/00-secret.yaml -f k8s/10-rbac.yaml -f k8s/20-cronjob.yaml
+# ============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pi-cicd-bootstrap
+  labels:
+    app: pi-cicd-bootstrap
+---
+# ── Secret: auth model LLM (pi auth.json) ────────────────────────────────
+# Isi auth.json = API keys pi (dari ~/.pi/agent/auth.json). JANGAN commit plaintext.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pi-auth
+  namespace: pi-cicd-bootstrap
+type: Opaque
+stringData:
+  auth.json: |-
+    {
+      "OPENROUTER_API_KEY": "<isi-dari-~/.pi/agent/auth.json>"
+    }
+---
+# ── Secret: kredensial eksekusi (git + kubectl) ──────────────────────────
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pi-exec-creds
+  namespace: pi-cicd-bootstrap
+type: Opaque
+stringData:
+  # GitHub PAT dengan scope repo (untuk git clone/push + gh pr)
+  GITHUB_TOKEN: "<PAT-repo-scope>"
+  GITHUB_USER: "<username>"
+  # kubeconfig context target (contoh hw-dev). Bisa juga via RBAC in-cluster.
+  kubeconfig: |-
+    apiVersion: v1
+    kind: Config
+    clusters: []
+    users: []
+---
+# ── RBAC: izin baca/apply di namespace target (contoh develop-qoin) ──────
+# Sesuaikan: untuk production jangan beri apply langsung (gunakan PR).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pi-cicd-bootstrap
+  namespace: pi-cicd-bootstrap
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: pi-cicd-bootstrap
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "apply", "patch"]
+  - apiGroups: [""]
+    resources: ["services", "secrets", "configmaps"]
+    verbs: ["get", "list", "apply", "create", "patch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: pi-cicd-bootstrap
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: pi-cicd-bootstrap
+subjects:
+  - kind: ServiceAccount
+    name: pi-cicd-bootstrap
+    namespace: pi-cicd-bootstrap
+---
+# ── CronJob: dry-run plan semua repo (aman, tanpa LLM) ───────────────────
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pi-cicd-plan-daily
+  namespace: pi-cicd-bootstrap
+spec:
+  schedule: "0 6 * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: pi-cicd-bootstrap
+          restartPolicy: Never
+          containers:
+            - name: bootstrap
+              image: loyaltolpi/pi-sdk-cicd-bootstrap:latest
+              imagePullPolicy: IfNotPresent
+              args:
+                - --repo
+                - plus-be-merchantpg-manager
+                - --branch
+                - develop
+                - --dry-run
+                - "true"
+              env:
+                - name: HOME
+                  value: /home/pi
+              volumeMounts:
+                - name: pi-auth
+                  mountPath: /etc/pi
+                - name: pi-exec
+                  mountPath: /etc/pi-exec
+                  readOnly: true
+                - name: kubeconfig
+                  mountPath: /root/.kube
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+                  memory: 256Mi
+          volumes:
+            - name: pi-auth
+              secret:
+                secretName: pi-auth
+            - name: pi-exec
+              secret:
+                secretName: pi-exec-creds
+            - name: kubeconfig
+              secret:
+                secretName: pi-exec-creds
+                items:
+                  - key: kubeconfig
+                    path: config

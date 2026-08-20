@@ -150,6 +150,44 @@ Coverage test (14 test):
 | 12-13 | `main --dry-run` + CLI script | integrasi (e2e ringan) |
 | 14 | LIVE agent: session + reasoning + system prompt | e2e (LLM) |
 
+## ☸️ Jalankan di Kubernetes (Pod / CronJob / Job)
+
+Project bisa berjalan di pod Kubernetes untuk otomasi bootstrap CI/CD. File pendukung ada di `k8s/`.
+
+### Tantangan utama
+
+| Tantangan | Solusi |
+|---|---|
+| Auth model LLM | mount `~/.pi/agent/auth.json` sebagai Secret → `/etc/pi` |
+| Kredensial eksekusi | Secret `GITHUB_TOKEN` + kubeconfig (atau RBAC in-cluster) |
+| Tools di pod | image `node:20-alpine` + `git`, `kubectl`, `gh` (Dockerfile di `k8s/`) |
+| Network | egress ke provider LLM (DeepSeek/OpenRouter) + Docker Hub + GitHub |
+
+### Setup
+
+```bash
+# build image
+cd ~/workspace/pi-sdk-cicd-bootstrap
+docker build -f k8s/Dockerfile -t loyaltolpi/pi-sdk-cicd-bootstrap:latest .
+
+# isi secret (auth.json + GITHUB_TOKEN + kubeconfig) lalu apply
+kubectl apply -f k8s/manifest.yaml
+```
+
+### Alur kerja di pod
+
+```
+CronJob (pola aman: dry-run) → jalankan bootstrap-agent.ts --dry-run true
+  → buat plan + cek prereq → simpan ke log/ConfigMap
+
+Job / Service (pola agent penuh) → createAgentSession → agent pakai bash
+  → clone → cicd-init → make build → gitops → apply (per RBAC)
+```
+
+> ⚠️ **Best practice:** di pod gunakan mode `--dry-run` untuk plan-only (tanpa LLM).
+> Mode agent penuh (LLM eksekusi perintah) sebaiknya dibatasi tools-nya dan
+> hanya untuk non-production. Production tetap via PR (lihat aturan global).
+
 ## 🔒 Aturan yang di-encode (dari AGENTS.md + skill)
 
 - Tidak commit/push langsung ke `main`/`master` — production wajib PR.
