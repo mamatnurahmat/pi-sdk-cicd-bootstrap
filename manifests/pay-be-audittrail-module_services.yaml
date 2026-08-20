@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations: {}
+  labels:
+    app: pay-be-audittrail-module
+    app.kubernetes.io/instance: production-payout
+    app.kubernetes.io/managed-by: Helm
+    env: production
+    project: payout
+    role: back
+  name: pay-be-audittrail-module
+  namespace: production-payout
+spec:
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+    - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: http
+  selector:
+    app: pay-be-audittrail-module
+    env: production
+    project: payout
+    role: back
+  sessionAffinity: None
+  type: ClusterIP

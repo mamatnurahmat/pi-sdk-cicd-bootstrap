@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations: {}
+  labels:
+    app: pay-be-audittrail-module
+    app.kubernetes.io/instance: production-payout
+    app.kubernetes.io/managed-by: Helm
+    env: production
+    language: go
+    project: payout
+    repo: pay-be-audittrail-module
+    role: back
+    secret-file: dotenv
+  name: pay-be-audittrail-module
+  namespace: production-payout
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: pay-be-audittrail-module
+      env: production
+      project: payout
+      role: back
+  strategy:
+    rollingUpdate:
+      maxSurge: 100%
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations: {}
+      labels:
+        app: pay-be-audittrail-module
+        env: production
+        project: payout
+        role: back
+    spec:
+      containers:
+        - image: loyaltolpi/pay-be-audittrail-module:ff4e27f
+          imagePullPolicy: Always
+          name: pay-be-audittrail-module
+          ports:
+            - containerPort: 80
+              name: http
+              protocol: TCP
+          resources:
+            limits:
+              cpu: 500m
+              memory: 100Mi
+            requests:
+              cpu: 30m
+              memory: 100Mi
+          securityContext: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /.env
+              name: file-config-volume
+              subPath: .env
+            - mountPath: /etc/localtime
+              name: tz-config
+      dnsPolicy: ClusterFirst
+      imagePullSecrets:
+        - name: regcred
+      nodeSelector:
+        cce.cloud.com/cce-nodepool: production-payout-nodepool-service
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - hostPath:
+            path: /usr/share/zoneinfo/Asia/Jakarta
+            type: ""
+          name: tz-config
+        - name: file-config-volume
+          secret:
+            defaultMode: 420
+            secretName: file-config-pay-be-audittrail-module
