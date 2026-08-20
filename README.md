@@ -173,19 +173,51 @@ docker run --rm --platform linux/amd64 \
 ### Wrapper `./run.sh` (single command)
 
 ```bash
-./run.sh --repo pay-be-audittrail-module --branch develop --dry-run true   # dry-run
-PI_MOUNT_AUTH=1 ./run.sh --repo pay-be-audittrail-module --branch develop  # agent penuh
+# Dry-run (tanpa LLM)
+./run.sh --repo pay-be-audittrail-module --branch develop --dry-run true
 
-# env:
-#   PI_IMAGE      default newrahmat/pi-sdk-cicd-bootstrap:0.1.0
-#   PI_PLATFORM   default linux/amd64 (Mac arm64: linux/arm64)
-#   PI_MOUNT_AUTH 1 = mount ~/.pi/agent (rw, utk lock file)
+# Agent penuh (LLM) + credentials eksekusi
+PI_MOUNT_AUTH=1 PI_FORWARD_CREDS=1 ./run.sh --repo pay-be-audittrail-module --branch develop
+
+# + mount workspace (agent bisa edit repo lokal di /workspace)
+PI_MOUNT_AUTH=1 PI_MOUNT_WORKSPACE=1 PI_FORWARD_CREDS=1 \
+  ./run.sh --repo pay-be-audittrail-module --branch develop
 ```
 
-> ⚠️ **Catatan penting:**
-> - Node cluster = `amd64` — gunakan `--platform linux/amd64` (image sudah multi-arch).
-> - Mount auth harus **read-write** (`:ro` gagal karena ModelRuntime tulis `auth.json.lock`).
-> - Image di-push ke Docker Hub `newrahmat/pi-sdk-cicd-bootstrap:0.1.0` (build via buildx multi-platform).
+### 🔑 Credentials di mode Docker Run
+
+| Env run.sh | Apa yang di-mount/forward | Untuk apa |
+|---|---|---|
+| `PI_MOUNT_AUTH=1` | `~/.pi/agent` → `/etc/pi/agent` (rw) | **LLM auth** — auth.json + models.json + settings.json untuk agent mode penuh |
+| `PI_FORWARD_CREDS=1` | env `GITHUB_USER/PASSWORD`, `DOCKERHUB_*`, `WEBHOOK_TRIGGER_*`, `GIT_USER/TOKEN` | **Eksekusi workflow** — clone/push repo, push image, trigger CI |
+| `PI_MOUNT_WORKSPACE=1` | `${PWD}` → `/workspace` | Agent bisa clone/edit repo di folder lokal |
+
+**Catatan penting (dari pengalaman):**
+- Mount auth harus **read-write** — ModelRuntime menulis `auth.json.lock` (gagal jika `:ro`).
+- **Jangan pakai `-w /workspace`** — node akan resolve `node_modules` host (esbuild platform mismatch). Cwd tetap `/app`; agent akses workspace via path `/workspace`.
+- Image multi-arch (amd64+arm64) — node cluster pakai `--platform linux/amd64`.
+- Prereq `docker` di dalam container = tidak ada (DinD terpisah) — normal untuk dry-run.
+
+**Docker run manual (tanpa wrapper):**
+
+```bash
+# Dry-run — tanpa credential
+ docker run --rm --platform linux/amd64 newrahmat/pi-sdk-cicd-bootstrap:0.1.0 \
+   --repo pay-be-audittrail-module --branch develop --dry-run true
+
+# Agent penuh — mount LLM auth (rw utk lock) + forward creds
+ docker run --rm --platform linux/amd64 \
+   -e PI_AGENT_DIR=/etc/pi/agent \
+   -e PI_AUTH_PATH=/etc/pi/agent/auth.json \
+   -e PI_MODELS_PATH=/etc/pi/agent/models.json \
+   -v "${HOME}/.pi/agent:/etc/pi/agent" \
+   -e GITHUB_USER -e GITHUB_PASSWORD -e DOCKERHUB_USER -e DOCKERHUB_PASSWORD \
+   newrahmat/pi-sdk-cicd-bootstrap:0.1.0 \
+   --repo pay-be-audittrail-module --branch develop
+```
+
+> ⚠️ **Keamanan:** jangan pernah commit auth.json / credential plaintext. Forward env via
+> shell (bukan hardcode di script), dan di CI gunakan Secret/CI-secret.
 
 ## ☸️ Jalankan di Kubernetes (Pod / CronJob / Job)
 
