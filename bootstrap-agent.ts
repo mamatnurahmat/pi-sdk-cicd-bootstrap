@@ -258,7 +258,8 @@ export async function checkPrereq(): Promise<string[]> {
 
 async function runAgent(opts: PlanOptions, plan: PlanResult) {
 	const cwd = process.cwd();
-	const agentDir = getAgentDir();
+	// Support kustomisasi lokasi agent dir via env (mis. di pod: /etc/pi/agent)
+	const agentDir = process.env.PI_AGENT_DIR || getAgentDir();
 
 	// DefaultResourceLoader dengan system prompt override (workflow bootstrap)
 	const loader = new DefaultResourceLoader({
@@ -270,7 +271,13 @@ async function runAgent(opts: PlanOptions, plan: PlanResult) {
 	});
 	await loader.reload();
 
-	const modelRuntime = await ModelRuntime.create();
+	// Auth model LLM:
+	//  - Lokasi auth.json & models.json bisa di-override via env (untuk pod/secret mount)
+	//  - Default: <agentDir>/auth.json & <agentDir>/models.json (lihat ModelRuntime.create)
+	const modelRuntime = await ModelRuntime.create({
+		authPath: process.env.PI_AUTH_PATH || undefined,
+		modelsPath: process.env.PI_MODELS_PATH || undefined,
+	});
 
 	const { session } = await createAgentSession({
 		cwd,

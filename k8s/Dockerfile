@@ -1,12 +1,18 @@
 # ============================================================================
 # Dockerfile — pi-sdk-cicd-bootstrap (untuk pod Kubernetes)
 # ============================================================================
-# Image minimal untuk menjalankan bootstrap-agent.ts di cluster:
-#   - node + tsx + pi-coding-agent SDK
-#   - git, kubectl, gh, docker (DinD optional via sidecar)
+# Image minimal untuk menjalankan bootstrap-agent.ts di cluster.
+#
+# ── PI AGENT ─────────────────────────────────────────────────────────────
+# Project ini memakai pi agent sebagai **SDK library** (bukan binary CLI):
+#   npm dependency: @earendil-works/pi-coding-agent@0.84.2
+#   import: createAgentSession / ModelRuntime / SessionManager
+# SDK di-install otomatis oleh `npm ci` di bawah (dari package.json dependencies).
+# Binary CLI `pi` (interaktif) TIDAK di-install — tidak dibutuhkan (headless pod).
+# ─────────────────────────────────────────────────────────────────────────
 #
 # Build:
-#   docker build -t loyaltolpi/pi-sdk-cicd-bootstrap:latest .
+#   docker build -f k8s/Dockerfile -t loyaltolpi/pi-sdk-cicd-bootstrap:latest .
 # ============================================================================
 FROM node:20-alpine
 
@@ -18,8 +24,14 @@ RUN apk add --no-cache git openssh-client curl bash ca-certificates \
     && chmod +x /usr/local/bin/gh
 
 WORKDIR /app
+
+# ── Install dependencies (termasuk pi-coding-agent SDK) ──────────────────
+# npm ci penuh (tanpa --omit=dev) supaya tsx & @types/node ikut ter-install.
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev || npm install
+RUN npm ci
+
+# ── Verifikasi SDK pi agent terpasang ────────────────────────────────────
+RUN node -e "const p=require('@earendil-works/pi-coding-agent/package.json'); console.log('[OK] pi-coding-agent SDK v'+p.version+' terinstall')"
 
 COPY bootstrap-agent.ts ./
 COPY e2e ./e2e

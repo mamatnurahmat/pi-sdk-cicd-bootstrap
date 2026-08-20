@@ -188,6 +188,50 @@ Job / Service (pola agent penuh) → createAgentSession → agent pakai bash
 > Mode agent penuh (LLM eksekusi perintah) sebaiknya dibatasi tools-nya dan
 > hanya untuk non-production. Production tetap via PR (lihat aturan global).
 
+## 🔑 Config Provider, Model & Credentials (untuk pod)
+
+Pi SDK memakai `ModelRuntime.create()` yang membaca kredensial dengan prioritas:
+
+```
+1. Runtime override (setRuntimeApiKey)      ← tidak di-persist
+2. auth.json (stored credentials)            ← ~/.pi/agent/auth.json
+3. Environment variables                     ← OPENROUTER_API_KEY, ANTHROPIC_API_KEY, dll
+4. Fallback custom provider (models.json)    ← ~/.pi/agent/models.json
+```
+
+### File yang dibutuhkan di pod (`/etc/pi/agent/`)
+
+| File | Isi | Sumber lokal |
+|---|---|---|
+| `auth.json` | API keys LLM (`OPENROUTER_API_KEY` dll) | `~/.pi/agent/auth.json` |
+| `models.json` | registri provider + model (openrouter → deepseek) | `~/.pi/models.json` |
+| `settings.json` | defaultModel / defaultProvider / thinkingLevel | `~/.pi/agent/settings.json` |
+
+Lokasi bisa di-override via env di pod:
+```yaml
+env:
+  - name: PI_AGENT_DIR     # agent dir pi (untuk DefaultResourceLoader)
+    value: /etc/pi/agent
+  - name: PI_AUTH_PATH     # lokasi auth.json
+    value: /etc/pi/agent/auth.json
+  - name: PI_MODELS_PATH   # lokasi models.json
+    value: /etc/pi/agent/models.json
+```
+
+### Kredensial eksekusi workflow (selain LLM)
+
+| Credential | Untuk apa | Di pod |
+|---|---|---|
+| `GITHUB_USER` + `GITHUB_PASSWORD` | clone/push repo aplikasi (private) | Secret `pi-exec-creds` |
+| `GITHUB_TOKEN` (gh) | buat PR gitops, trigger-ci | Secret `pi-exec-creds` |
+| `DOCKERHUB_USER/PASSWORD` | push image ke registry | Secret (optional) |
+| kubeconfig / RBAC | `kubectl apply` ke namespace target | Secret / ServiceAccount |
+| `WEBHOOK_TRIGGER_TOKEN` | trigger Jenkins X pipeline | Secret (optional) |
+
+> ⚠️ **Jangan pernah commit** auth.json/models.json plaintext — selalu via Secret
+> (contoh `k8s/manifest.yaml` → `Secret pi-auth`), dan isi nilai dari
+> `~/.pi/agent/auth.json` + `~/.pi/models.json` saat apply.
+
 ## 🔒 Aturan yang di-encode (dari AGENTS.md + skill)
 
 - Tidak commit/push langsung ke `main`/`master` — production wajib PR.

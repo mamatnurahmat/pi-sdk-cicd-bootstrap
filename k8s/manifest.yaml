@@ -17,8 +17,12 @@ metadata:
   labels:
     app: pi-cicd-bootstrap
 ---
-# ── Secret: auth model LLM (pi auth.json) ────────────────────────────────
-# Isi auth.json = API keys pi (dari ~/.pi/agent/auth.json). JANGAN commit plaintext.
+# ── Secret: auth model LLM + models.json (pi agent dir) ──────────────────
+# Struktur ini = isi ~/.pi/agent/ yang dibutuhkan pi SDK di pod:
+#   auth.json   → kredensial (API keys) — lihat ModelRuntime.create()
+#   models.json → registri provider + model (custom/openrouter)
+#   settings.json → defaultModel/defaultProvider/thinkingLevel
+# Sumber lokal: ~/.pi/agent/{auth.json,models.json} (JANGAN commit plaintext).
 apiVersion: v1
 kind: Secret
 metadata:
@@ -29,6 +33,24 @@ stringData:
   auth.json: |-
     {
       "OPENROUTER_API_KEY": "<isi-dari-~/.pi/agent/auth.json>"
+    }
+  models.json: |-
+    {
+      "providers": {
+        "openrouter": {
+          "apiKey": "<OPENROUTER_API_KEY>",
+          "models": [
+            { "id": "deepseek/deepseek-chat", "name": "DeepSeek V3", "reasoning": false, "input": ["text"], "contextWindow": 1000000, "maxTokens": 8192 },
+            { "id": "deepseek/deepseek-r1", "name": "DeepSeek R1", "reasoning": true, "input": ["text"], "contextWindow": 1000000, "maxTokens": 8192 }
+          ]
+        }
+      }
+    }
+  settings.json: |-
+    {
+      "defaultModel": "deepseek-v4-flash",
+      "defaultProvider": "deepseek",
+      "defaultThinkingLevel": "high"
     }
 ---
 # ── Secret: kredensial eksekusi (git + kubectl) ──────────────────────────
@@ -114,9 +136,16 @@ spec:
               env:
                 - name: HOME
                   value: /home/pi
+                # Pi agent dir: mount auth.json/models.json/settings.json di sini
+                - name: PI_AGENT_DIR
+                  value: /etc/pi/agent
+                - name: PI_AUTH_PATH
+                  value: /etc/pi/agent/auth.json
+                - name: PI_MODELS_PATH
+                  value: /etc/pi/agent/models.json
               volumeMounts:
                 - name: pi-auth
-                  mountPath: /etc/pi
+                  mountPath: /etc/pi/agent
                 - name: pi-exec
                   mountPath: /etc/pi-exec
                   readOnly: true
