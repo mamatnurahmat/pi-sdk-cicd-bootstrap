@@ -14,7 +14,8 @@
 # Build:
 #   docker build -f k8s/Dockerfile -t loyaltolpi/pi-sdk-cicd-bootstrap:latest .
 # ============================================================================
-FROM node:20-alpine
+# undici 8.x (dependency pi-coding-agent) butuh Node >= 22.19 → pakai node:24-alpine
+FROM node:24-alpine
 
 RUN apk add --no-cache git openssh-client curl bash ca-certificates \
     && curl -fsSL https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl -o /usr/local/bin/kubectl \
@@ -31,7 +32,9 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 # ── Verifikasi SDK pi agent terpasang ────────────────────────────────────
-RUN node -e "const p=require('@earendil-works/pi-coding-agent/package.json'); console.log('[OK] pi-coding-agent SDK v'+p.version+' terinstall')"
+# package.json tidak bisa di-require langsung (exports hanya . / rpc-entry / client)
+# → verifikasi via VERSION yang di-export dari index.
+RUN node -e "import('@earendil-works/pi-coding-agent').then(m => console.log('[OK] pi-coding-agent SDK terinstall (VERSION=' + m.VERSION + ')'))"
 
 COPY bootstrap-agent.ts ./
 COPY e2e ./e2e
