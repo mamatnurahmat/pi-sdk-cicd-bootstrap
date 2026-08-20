@@ -150,6 +150,43 @@ Coverage test (14 test):
 | 12-13 | `main --dry-run` + CLI script | integrasi (e2e ringan) |
 | 14 | LIVE agent: session + reasoning + system prompt | e2e (LLM) |
 
+## 🐳 Docker Single Command (cara paling simpel)
+
+Image multi-platform (amd64+arm64) sudah di-publish: `newrahmat/pi-sdk-cicd-bootstrap:0.1.0`.
+Jalankan langsung tanpa install npm:
+
+```bash
+# Dry-run (aman, tanpa LLM)
+docker run --rm --platform linux/amd64 newrahmat/pi-sdk-cicd-bootstrap:0.1.0 \
+  --repo pay-be-audittrail-module --branch develop --dry-run true
+
+# Agent mode penuh (mount auth LLM dari ~/.pi/agent)
+docker run --rm --platform linux/amd64 \
+  -e PI_AGENT_DIR=/etc/pi/agent \
+  -e PI_AUTH_PATH=/etc/pi/agent/auth.json \
+  -e PI_MODELS_PATH=/etc/pi/agent/models.json \
+  -v "${HOME}/.pi/agent:/etc/pi/agent" \
+  newrahmat/pi-sdk-cicd-bootstrap:0.1.0 \
+  --repo pay-be-audittrail-module --branch develop
+```
+
+### Wrapper `./run.sh` (single command)
+
+```bash
+./run.sh --repo pay-be-audittrail-module --branch develop --dry-run true   # dry-run
+PI_MOUNT_AUTH=1 ./run.sh --repo pay-be-audittrail-module --branch develop  # agent penuh
+
+# env:
+#   PI_IMAGE      default newrahmat/pi-sdk-cicd-bootstrap:0.1.0
+#   PI_PLATFORM   default linux/amd64 (Mac arm64: linux/arm64)
+#   PI_MOUNT_AUTH 1 = mount ~/.pi/agent (rw, utk lock file)
+```
+
+> ⚠️ **Catatan penting:**
+> - Node cluster = `amd64` — gunakan `--platform linux/amd64` (image sudah multi-arch).
+> - Mount auth harus **read-write** (`:ro` gagal karena ModelRuntime tulis `auth.json.lock`).
+> - Image di-push ke Docker Hub `newrahmat/pi-sdk-cicd-bootstrap:0.1.0` (build via buildx multi-platform).
+
 ## ☸️ Jalankan di Kubernetes (Pod / CronJob / Job)
 
 Project bisa berjalan di pod Kubernetes untuk otomasi bootstrap CI/CD. File pendukung ada di `k8s/`.
