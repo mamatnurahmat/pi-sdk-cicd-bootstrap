@@ -172,16 +172,19 @@ docker run --rm --platform linux/amd64 \
 
 ### Wrapper `./run.sh` (single command)
 
+> 💡 **Auto-detect mode:** tanpa `--dry-run true` = **agent mode** → `run.sh` otomatis
+> mount LLM auth (`PI_MOUNT_AUTH=1`) + forward creds (`PI_FORWARD_CREDS=1`).
+
 ```bash
 # Dry-run (tanpa LLM)
 ./run.sh --repo pay-be-audittrail-module --branch develop --dry-run true
 
-# Agent penuh (LLM) + credentials eksekusi
-PI_MOUNT_AUTH=1 PI_FORWARD_CREDS=1 ./run.sh --repo pay-be-audittrail-module --branch develop
+# Agent penuh (LLM) — auth + creds AUTO-mount (tanpa perlu flag)
+./run.sh --repo pay-be-bulkdatatransfer-module --branch develop
 
 # + mount workspace (agent bisa edit repo lokal di /workspace)
-PI_MOUNT_AUTH=1 PI_MOUNT_WORKSPACE=1 PI_FORWARD_CREDS=1 \
-  ./run.sh --repo pay-be-audittrail-module --branch develop
+PI_MOUNT_WORKSPACE=1 ./run.sh --repo pay-be-audittrail-module --branch develop
+```
 ```
 
 ### 🔑 Credentials di mode Docker Run

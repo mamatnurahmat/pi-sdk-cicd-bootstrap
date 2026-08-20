@@ -22,9 +22,34 @@ set -euo pipefail
 
 PI_IMAGE="${PI_IMAGE:-newrahmat/pi-sdk-cicd-bootstrap:0.1.0}"
 PI_PLATFORM="${PI_PLATFORM:-linux/amd64}"
-PI_MOUNT_AUTH="${PI_MOUNT_AUTH:-0}"
+
+# ── Deteksi mode: dry-run (tanpa LLM) vs agent penuh (butuh LLM auth) ──
+# Jika tidak ada flag --dry-run true → agent mode → WAJIB mount auth LLM.
+IS_DRY_RUN=0
+for arg in "$@"; do
+  if [ "$arg" = "--dry-run" ]; then IS_DRY_RUN=1; fi
+  if [ "$arg" = "true" ] && [ "$IS_DRY_RUN" = "1" ]; then IS_DRY_RUN=1; fi
+done
+if [ "$IS_DRY_RUN" = "1" ] && echo "$@" | grep -q -- "--dry-run[[:space:]]*true"; then
+  IS_DRY_RUN=1
+fi
+
+# PI_MOUNT_AUTH default: 1 untuk agent mode, 0 untuk dry-run (bisa di-override)
+if [ -z "${PI_MOUNT_AUTH:-}" ]; then
+  if [ "$IS_DRY_RUN" = "1" ]; then
+    PI_MOUNT_AUTH=0
+  else
+    PI_MOUNT_AUTH=1
+    echo "ℹ️  Agent mode terdeteksi → otomatis mount LLM auth (~/.pi/agent)"
+    echo "   (nonaktifkan: PI_MOUNT_AUTH=0, atau pakai --dry-run true)"
+    echo ""
+  fi
+fi
 PI_MOUNT_WORKSPACE="${PI_MOUNT_WORKSPACE:-0}"
-PI_FORWARD_CREDS="${PI_FORWARD_CREDS:-0}"
+# Forward creds default: 1 untuk agent mode (butuh GITHUB/DOCKERHUB utk eksekusi), 0 utk dry-run
+if [ -z "${PI_FORWARD_CREDS:-}" ]; then
+  PI_FORWARD_CREDS=$([ "$IS_DRY_RUN" = "1" ] && echo 0 || echo 1)
+fi
 
 # ── Banner ───────────────────────────────────────────────────────────────
 echo "╔══════════════════════════════════════════════════════════╗"
